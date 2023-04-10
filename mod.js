@@ -1,7 +1,5 @@
 let api;
 
-const { JSDOM } = require('./node_modules/jsdom')
-
 var dom;
 
 const re_convo_line_with_speaker = /<span style="color: #(?<color>[A-Fa-f0-9]+)">(?<label>[()A-Z0-9^]+):/
@@ -17,6 +15,20 @@ function labelColorPairPredicateFactory(labels, color) {
       return true
     }
   }
+}
+
+function naiveInnerText(node) {
+  const Node = node; // We need Node(DOM's Node) for the constants, but Node doesn't exist in the nodejs global space, and any Node instance references the constants through the prototype chain
+  return [...node.childNodes].map(node => {
+    switch (node.nodeType) {
+      case Node.TEXT_NODE:
+        return node.textContent;
+      case Node.ELEMENT_NODE:
+        return naiveInnerText(node);
+      default:
+        return "";
+    }
+  }).join("\n");
 }
 
 const person_matchers = [
@@ -76,8 +88,10 @@ const person_matchers = [
 })
 
 function identifyPerson(node) {
-  for (const i in person_matchers) {
-    const {name, predicate} = person_matchers[i]
+  // const known = node.getAttribute(`data-sem-person`)
+  // if (known) return known
+
+  for (const {name, predicate} of person_matchers) {
     if (predicate(node) == true) {
       return name
     }
@@ -86,7 +100,19 @@ function identifyPerson(node) {
   return "UNKNOWN"
 }
 
+const emptyset = new Set()
+
 function makeSemanticContent(orig_content) {
+  // Optimization: skip image-only pages
+  if (!orig_content.trim()) {
+    // api.logger.warn("skip", orig_content)
+    return {
+      sem_participants: emptyset,
+      sem_wordcount: 0
+    }
+  }
+
+  const { JSDOM } = require('./node_modules/jsdom')
   dom = dom || new JSDOM('<!DOCTYPE html><body></body>').window.document;
 
   container = dom.createElement('div')
@@ -96,20 +122,22 @@ function makeSemanticContent(orig_content) {
   container.querySelectorAll('span[style]').forEach(line => {
     try {
       const loh = line.outerHTML
-      const match_fb = re_convo_line_no_speaker.exec(loh)
-      if (match_fb) {
+      // const match_fb = re_convo_line_no_speaker.exec(loh)
+      // if (match_fb) {
         const match = re_convo_line_with_speaker.exec(loh)
         if (match) {
-          Object.keys(match.groups).forEach(prop => {
-            if (prop == 'color') return
-            line.setAttribute(`data-sem-${prop}`, match.groups[prop])
-          })
-          line.setAttribute(`data-sem-color`, match.groups['color'].toUpperCase())
+          // Object.keys(match.groups).forEach(prop => {
+          //   if (prop == 'color') return
+          //   line.setAttribute(`data-sem-${prop}`, match.groups[prop])
+          // })
+          line.setAttribute('data-sem-label', match.groups['label'])
+          line.setAttribute('data-sem-color', match.groups['color'].toUpperCase())
+
+          line.setAttribute(`data-sem-person`, identifyPerson(line))
 
           // Check for spr2 and process next span
-          if (match.groups['color'].includes('^2')) {
+          if (match.groups['label'].includes('^2')) {
             const real_line = line.nextElementSibling
-            assert(real_line.tag == "SPAN")
             // real_line.setAttribute(`data-sem-color`, match_fb.groups['color'].toUpperCase())
 
             // Shenanigans:
@@ -118,20 +146,18 @@ function makeSemanticContent(orig_content) {
             // Move data from label to real line
             ;['label', 'person'].forEach(prop => {
               const attr = `data-sem-${prop}`
-              real_line.setAttribute(attr, prev_el.getAttribute(attr))
+              real_line.setAttribute(attr, line.getAttribute(attr))
               line.removeAttribute(attr)
             })
           }
-          line.setAttribute(`data-sem-person`, line.getAttribute(`data-sem-person`) || identifyPerson(line))
         } else {
-          // Just a colored span, probably.
-          // api.logger.warn('no label, but not sprite^2:', loh)
+          // Just a styled span, probably.
         }
-      } else {
-        // Span is styled, make sure it's not colored too (tricking our regex)
-        // if (line.style.color)
-        //   api.logger.warn('unmatched:', loh)
-      }
+      // } else {
+      //   // Span is styled, make sure it's not colored too (tricking our regex)
+      //   // if (line.style.color)
+      //   //   api.logger.warn('unmatched:', loh)
+      // }
     } catch (e) { api.logger.error(line); throw e; }
   })
 
@@ -143,7 +169,8 @@ function makeSemanticContent(orig_content) {
     content: res,
     sem_participants: new Set(
       [...container.querySelectorAll("[data-sem-person]")].map(e => e.getAttribute('data-sem-person'))
-    )
+    ),
+    sem_wordcount: (container.innerHTML ? naiveInnerText(container).split(' ').length : 0)
   }
 }
 
@@ -157,12 +184,138 @@ module.exports = {
     api = api_
   },
 
+  browserPages: {
+    'SEMANTIC': {
+      component: {
+        title: () => "Semantic conversation browser",
+        template: `
+<div class="pageBody">
+  <NavBanner />
+  <div class="pageFrame">
+    <div class="pageContent">
+      <div class="testSection">
+        <h2>Conversations</h2>
+        <p>filter conversations by speaker</p>
+        <p>multiple selections load the intersection ("convos with both dirk and jane")</p>
+        <ul style="column-count: 3;">
+          <li v-for="person in allPeople" :key="person">
+            <label>
+              <input type="checkbox" v-model="selectedPersonsDict[person]" />
+              <span v-text="person" />
+            </label>
+          </li>
+        </ul>
+        <ul class="output" v-if="Object.values(selectedPersonsDict).some(Boolean)">
+          <li v-for='p in convoMatches' :key='p.pageId'>
+            <StoryPageLink long :mspaId='p.pageId' />
+            <span v-text="' ' + pageSummary(p)" />
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>`,
+        scss: `& {
+  color: var(--font-default);
+  background: var(--page-pageBody);
+
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-flow: column;
+  flex: 1 0 auto;
+  align-items: center;
+
+  .pageFrame {
+    background: var(--page-pageFrame);
+
+    width: 950px;
+    padding-top: 7px;
+    padding-bottom: 23px;
+    margin: 0 auto;
+
+    flex: 0 1 auto;
+    display: flex;
+    flex-flow: column nowrap;
+    justify-content: center;
+    align-items: center;
+    align-content: center;
+
+    .pageContent{
+      background: var(--page-pageContent);
+      width: 650px;
+    }
+  }
+}
+.testSection {
+  border-top: 1em solid var(--page-pageFrame);
+  padding: 30px;
+
+  font-family: Verdana, Geneva, Tahoma, sans-serif;
+  font-size: 12px;
+  font-weight: normal;
+  label {
+    font-weight: bold;
+  }
+  div, ul {
+    padding: 2em 1em;
+  }
+  @at-root ul#{&}, ol#{&} {
+    list-style: inside;
+  }
+}
+.output {
+  border: 1px dashed grey;
+  padding: 4px;
+  @at-root ul#{&}, ol#{&} {
+    list-style: inside;
+  }
+}`,
+        data: function() {
+          return {
+            selectedPersonsDict: {}
+          }
+        },
+        computed: {
+          allPeople(){
+            return [...new Set(
+                Object.values(this.$archive.mspa.story)
+                  .map(p => p.sem_participants).filter(Boolean)
+                  .reduce((acc, nset) => [...nset, ...acc], []))
+              ].sort()
+          },
+          selectedPersonsList(){
+            return Object.keys(this.selectedPersonsDict).filter(k => this.selectedPersonsDict[k])
+          },
+          convoMatches(){
+            return Object.values(vm.$archive.mspa.story)
+              .filter(p => p.sem_participants)
+              .filter(p => this.selectedPersonsList.every(v => p.sem_participants.has(v)))
+          }
+        },
+        methods: {
+          pageSummary(p){
+            return `${p.sem_wordcount} words. ${[...p.sem_participants].join(', ')}`
+          }
+        },
+      }
+    }
+  },
+
   edit(archive) {
     Object.keys(archive.mspa.story).forEach(page_num => {
       archive.mspa.story[page_num] = {
         ...archive.mspa.story[page_num],
         ...makeSemanticContent(archive.mspa.story[page_num].content)
       }
+    })
+
+    archive.tweaks.modHomeRowItems.unshift({
+      href: "/semantic",
+      thumbsrc: "/archive/collection/archive_ryanquest.png",
+      date: "",
+      title: 'Semantic panel',
+      description: `<p>You can do anything</p>`
     })
 
     archive.flags['mod.semantic'] = true
