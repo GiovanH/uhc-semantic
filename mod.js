@@ -140,7 +140,10 @@ function makeSemanticContent(orig_content) {
   //   api.logger.warn(orig_content, '\n-------\n', res)
   // }
   return {
-    content: res
+    content: res,
+    sem_participants: new Set(
+      [...container.querySelectorAll("[data-sem-person]")].map(e => e.getAttribute('data-sem-person'))
+    )
   }
 }
 
