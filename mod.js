@@ -1,15 +1,14 @@
-let api;
-
+var api;
+var semantic_info;
 var dom;
-
 var cache = {};
 
-const re_convo_line_with_speaker = /^<span style="[^"]*?color: #(?<color>[A-Fa-f0-9]+)"[^>]*?>(?<label>\??[()A-Za-z0-9_^]{2,})[<:]/
+const re_convo_line_with_speaker = /^<span style="[^"]*?color: #(?<color>[A-Fa-f0-9]+)"[^>]*?>(?<label>\??[()A-Za-z0-9_^]{2,50})[<:]/
 const re_convo_line_no_speaker   = /^<span style="[^"]*?color: #(?<color>[A-Fa-f0-9]+)"[^>]*?>(?!(CURRENT|PAST|FUTURE|\?\?\?)?[a-z]+[A-Z][a-z]+ )(?!\[[A-Z]{2}\])/
 
 const simpleHash = str => {
   let hash = 0;
-  for (let i = 0; i < str.length; i++) {
+  for (const i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = (hash << 5) - hash + char;
     hash &= hash; // Convert to 32bit integer
@@ -21,16 +20,16 @@ function apiStoreMemoized(funkey, fun){
   return function(content_str, options) {
     return fun(content_str, options)
 
-    cache[funkey] = cache[funkey] || {}
-    const argkey = simpleHash(content_str)
+    // cache[funkey] = cache[funkey] || {}
+    // const argkey = simpleHash(content_str)
 
-    const cached_result = cache[funkey][argkey]
-    if (cached_result) return cached_result
-    else {
-      const result = fun(content_str, options)
-      cache[funkey][argkey] = result
-      return result
-    }
+    // const cached_result = cache[funkey][argkey]
+    // if (cached_result) return cached_result
+    // else {
+    //   const result = fun(content_str, options)
+    //   cache[funkey][argkey] = result
+    //   return result
+    // }
   }
 }
 
@@ -76,13 +75,14 @@ const person_matchers = [
     if (node.getAttribute('data-sem-color') == '000000' && node.getAttribute('data-sem-logtype') == 'authorlog') {
       return true
     }
-    return false;
+    return labelColorPairPredicateFactory(["HUSSIE"], '000000');
   }},
   { name: "aradia", predicate: labelColorPairPredicateFactory(["AA", "ARADIASPRITE", "ARADIABOT", "ARADIA"], 'A10000') },
   { name: "aradia.bot", predicate: labelColorPairPredicateFactory(["AA"], '000056') },
   { name: "aranea", predicate: labelColorPairPredicateFactory(["ARANEA", "NEYTIRI", "undefined"], '005682') },
   { name: "bec.sprite", predicate: labelColorPairPredicateFactory(["BECSPRITE"], '1F9400') },
-  { name: "calliope", predicate: labelColorPairPredicateFactory(["CALLIOPE", "UU"], ['929292', 'FF0000', '323232']) },
+  { name: "calliope", predicate: labelColorPairPredicateFactory(["CALLIOPE", "UU", "CALLIE"], ['929292', '323232']) },
+  { name: "calliope.adult", predicate: labelColorPairPredicateFactory(["CALLIOPE", "UU", "CALLIE"], ['FF0000']) },
   { name: "caliborn", predicate(node) {
     if (['2ED73A', '323232', '126628', '929292'].includes(node.getAttribute('data-sem-color'))) {
       if (node.getAttribute('data-sem-label') == "uu" || node.getAttribute('data-sem-logtype') == 'authorlog')
@@ -97,11 +97,11 @@ const person_matchers = [
   { name: "dave.sprite", predicate: labelColorPairPredicateFactory(["DAVESPRITE", "TG"], 'F2A400') },
   { name: "dirk", predicate: labelColorPairPredicateFactory(["TT", "DIRK"], ['F2A400', 'FFCC00']) },
   { name: "dirk.alt", predicate: labelColorPairPredicateFactory(["TT", "DIRK"], ['E00707']) },
-  { name: "dirk.ar.equius.sprite", predicate: labelPredicateFactory(["ARQUIUSPRITE"]) },
+  { name: "dirk.alt.equius.sprite", predicate: labelPredicateFactory(["ARQUIUSPRITE"]) },
   { name: "dirk.equius.gamzee.docscratch", predicate: labelColorPairPredicateFactory(["undefined"], 'FFFFFF') },
   { name: "equius", predicate: labelColorPairPredicateFactory(["CT", "EQUIUS"], '000056') },
   { name: "equius.sprite", predicate: labelPredicateFactory(["EQUIUSPRITE"]) },
-  { name: "eridan", predicate: labelColorPairPredicateFactory(["CA"], '6A006A') },
+  { name: "eridan", predicate: labelColorPairPredicateFactory(["CA", "ERIDAN"], '6A006A') },
   { name: "eridan.sollux.sprite", predicate: labelPredicateFactory(["ERISOLSPRITE"]) },
   { name: "feferi", predicate: labelPredicateFactory(["CC", "FEFERI"]) },
   { name: "feferi.nepeta.sprite", predicate: labelPredicateFactory(["FEFETASPRITE"]) },
@@ -128,7 +128,7 @@ const person_matchers = [
   { name: "john", predicate: labelColorPairPredicateFactory(["EB", "JOHN", "GT", "(JOHN)", "E8", "CEB"], '0715CD') },
   { name: "kanaya", predicate: labelColorPairPredicateFactory(["GA", "CGA", "FGA", "KANAYA"], '008141') },
   { name: "kanayamom", predicate: labelPredicateFactory(["MOTHERSPRITE"]) },
-  { name: "karkat", predicate: labelColorPairPredicateFactory(["CG", "KARKAT"], ['FF0000', '626262']) },
+  { name: "karkat", predicate: labelColorPairPredicateFactory(["CG", "KARKAT", "KARKATs"], ['FF0000', '626262']) },
   { name: "meenah", predicate: labelPredicateFactory(["MEENAH"]) },
   { name: "nepeta", predicate: labelColorPairPredicateFactory(["AC", "NEPETA"], '416600') },
   { name: "nepeta.sprite", predicate: labelPredicateFactory(["NEPETASPRITE"]) },
@@ -139,9 +139,24 @@ const person_matchers = [
   { name: "tavros", predicate: labelColorPairPredicateFactory(["AT", "TAVROS"], 'A15000') },
   { name: "tavros.sprite", predicate: labelPredicateFactory(["TAVROSPRITE"]) },
   { name: "tavros.vriska.sprite", predicate: labelPredicateFactory(["TAVRISPRITE"]) },
-  { name: "terezi", predicate: labelColorPairPredicateFactory(["GC", "TEREZI", "TER3Z1"], '008282') },
+  { name: "terezi", predicate: labelColorPairPredicateFactory(["GC", "TEREZI", "TER3Z1"], ['008282', 'E00707']) },
   { name: "terezimom", predicate: labelPredicateFactory(["DRAGONSPRITE"]) },
   { name: "vriska", predicate: labelColorPairPredicateFactory(["AG", "VRISKA", "(VRISKA)"], '005682') },
+
+  { name: "cronus", predicate: labelPredicateFactory(["CRONUS"]) },
+  { name: "damara", predicate: labelPredicateFactory(["DAMARA"]) },
+  { name: "horuss", predicate: labelPredicateFactory(["HORUSS"]) },
+  { name: "hussie", predicate: labelPredicateFactory(["HUSSIE"]) },
+  { name: "kankri", predicate: labelPredicateFactory(["KANKRI"]) },
+  { name: "kurloz", predicate: labelPredicateFactory(["KURLOZ"]) },
+  { name: "latula", predicate: labelPredicateFactory(["LATULA"]) },
+  { name: "meulin", predicate: labelPredicateFactory(["MEULIN"]) },
+  { name: "mituna", predicate: labelPredicateFactory(["MITUNA", "M1TUN4"]) },
+  { name: "nanna", predicate: labelPredicateFactory(["NANNA"]) },
+  { name: "porrim", predicate: labelPredicateFactory(["PORRIM"]) },
+  { name: "rufioh", predicate: labelPredicateFactory(["RUFIOH"]) },
+  { name: "squarewave", predicate: labelPredicateFactory(["SQUAREWAVE"]) },
+  { name: "salamander", predicate: labelPredicateFactory(["SALAMANDER", "MERCHANT", "HABERDASHER"], ['000000']) },
 ]
 
 function identifyPerson(node, guess, jobnote) {
@@ -172,7 +187,16 @@ function getTextType(content) {
   }
 }
 
+function newSemanticInfo() {
+  // semantic_info
+  return {
+    all_people: {},
+    all_conversations: {}
+  }
+}
+
 const makeSemanticContent = apiStoreMemoized('makeSemanticContent', function(orig_content, options) {
+  const page_num = options.page
   // Optimization: skip image-only pages
   if (!orig_content.trim()) {
     return {
@@ -190,6 +214,21 @@ const makeSemanticContent = apiStoreMemoized('makeSemanticContent', function(ori
   container = dom.createElement('div')
   container.innerHTML = orig_content
 
+  function tryIdAndSetPerson(node, label, jobnote) {
+    const person = identifyPerson(node, label, jobnote)
+    if (person) {
+      node.setAttribute(`data-sem-person`, person) // Don't set "undefined" string.
+      semantic_info.all_people[person] = semantic_info.all_people[person] || {
+        conversations: new Set(),
+        labels: new Set(),
+        colors: new Set()
+      }
+      semantic_info.all_people[person].conversations.add(page_num)
+      semantic_info.all_people[person].labels.add(label)
+      semantic_info.all_people[person].colors.add(node.getAttribute(`data-sem-color`))
+    }
+  }
+
   function processLinesWithMatcher(re_matcher, querySelector, jobnote) {
     // SPEAKER: Text formatted logs
     container.querySelectorAll(querySelector).forEach(line => {
@@ -198,6 +237,9 @@ const makeSemanticContent = apiStoreMemoized('makeSemanticContent', function(ori
         // Just inline emphasized text
         return
       }
+      // if (re_matcher == re_convo_line_with_speaker && line.querySelector('br'))
+      //   return // Not labeled, it's giant multiline text
+
       try {
         const match = re_matcher.exec(loh)
         if (match) {
@@ -205,18 +247,17 @@ const makeSemanticContent = apiStoreMemoized('makeSemanticContent', function(ori
           line.setAttribute('data-sem-label', label)
           line.setAttribute('data-sem-color', match.groups['color'].toUpperCase())
 
-          let line_identifying_node = line;
-
-          const person = identifyPerson(line_identifying_node, label, jobnote)
-          if (person) line.setAttribute(`data-sem-person`, person) // Don't set "undefined" string.
+          tryIdAndSetPerson(line, label, jobnote)
 
           // Check for spr2/crockertier/grimbark and process next span
           const real_line = line.nextElementSibling
-          const line_is_just_label_and_maybe_emote = label && (label.length + 10 > line.textContent.length)
+          const extra_space = line.nextSibling
           if (
             re_matcher == re_convo_line_with_speaker         // We are searching for labels, not partial text
-            && label && line_is_just_label_and_maybe_emote   // We found a label, and we are (approx, davepeta) just a label
-            && real_line && real_line.matches('span[style]') // The next element sibling is a styled span
+            && !(extra_space && extra_space.nodeType == line.TEXT_NODE && extra_space.textContent.trim())          // If next element is plaintext, it's just a space
+            && label && (label.length + 10 > line.textContent.length)   // We found a label, and we are (approx, davepeta) just a label
+            && real_line && real_line.matches('span[style]')         // The next element sibling is a styled span
+            && !re_convo_line_with_speaker.exec(real_line.outerHTML) // Next element is not a valid label (009432)
           ) {
             // real_line.setAttribute(`data-sem-leapfrog`, "target")
             // line.setAttribute(`data-sem-leapfrog`, "jumper")
@@ -230,11 +271,11 @@ const makeSemanticContent = apiStoreMemoized('makeSemanticContent', function(ori
             } else {
               api.logger.error(jobnote, `Real line didn't match color regex\n`, real_line.outerHTML)
             }
-            const person_retry = identifyPerson(line, label, "recompute person w copied color")
-            if (person_retry) line.setAttribute(`data-sem-person`, person_retry)
+
+            // Retry with color info
+            tryIdAndSetPerson(line, label, jobnote)
 
             // Hoist label into span
-            const extra_space = line.nextSibling
             if (extra_space && extra_space.nodeType == line.TEXT_NODE)
               real_line.insertAdjacentText('afterBegin', extra_space.textContent)
 
@@ -311,6 +352,8 @@ module.exports = {
   },
 
   edit(archive) {
+    semantic_info = newSemanticInfo()
+
     Object.keys(archive.mspa.story).forEach(page_num => {
     // ;[
     //   '009907', '009362', '005527',
@@ -319,15 +362,26 @@ module.exports = {
     // ].forEach(page_num => {
       archive.mspa.story[page_num] = {
         ...archive.mspa.story[page_num],
-        ...makeSemanticContent(archive.mspa.story[page_num].content)
+        ...makeSemanticContent(archive.mspa.story[page_num].content, {
+          page: page_num
+        })
       }
       // api.logger.info(page_num, archive.footnotes.story[page_num])
       if (archive.footnotes.story[page_num]) {
         for (const i in archive.footnotes.story[page_num]) {
+          const scraped_info = makeSemanticContent(archive.footnotes.story[page_num][i].content, {
+            page: page_num,
+            crawl_footnotes: true
+          })
           archive.footnotes.story[page_num][i] = {
             ...archive.footnotes.story[page_num][i],
-            ...makeSemanticContent(archive.footnotes.story[page_num][i].content, {crawl_footnotes: true})
+            ...scraped_info.content,
           }
+          archive.mspa.story[page_num].sem_participants = [...new Set([
+            ...archive.mspa.story[page_num].sem_participants,
+            ...scraped_info.sem_participants
+          ])]
+          archive.mspa.story[page_num].sem_wordcount += scraped_info.sem_wordcount
           // api.logger.info(archive.footnotes.story[page_num][i])
         }
       }
@@ -341,7 +395,7 @@ module.exports = {
       description: `<p>You can do anything</p>`
     })
 
-    archive.flags['mod.semantic'] = true
+    archive.flags['mod.semantic'] = semantic_info
 
     // Save cache
     api.store.set("cache", cache)
@@ -360,20 +414,29 @@ module.exports = {
         <h2>Conversations</h2>
         <p>filter conversations by speaker</p>
         <p>multiple selections load the intersection ("convos with both dirk and jane")</p>
-        <ul style="column-count: 2;">
-          <li v-for="person in allPeople" :key="person">
+        <ul class="options" style="column-count: 2;">
+          <li v-for="person in allPeople.sort(peopleSortFn)" :key="person">
             <label>
-              <input type="checkbox" v-model="selectedPersonsDict[person]" />
-              <span v-text="person" />
+              <input type="checkbox"
+                v-model="selectedPersonsDict[person]"
+                :disabled="wouldBeConvosMap[person] == false"
+              />
+              <span v-text="person" :style="personColor(person)" />
             </label>
           </li>
         </ul>
-        <label>
-          <input type="checkbox" v-model="includePartial" />
-          <span>Include "partial" matches (jade matches jade.sprite)</span>
-        </label>
+        <ul class="options">
+          <li><label>
+            <input type="checkbox" v-model="includePartial"/>
+            <span>Include "partial" matches (jade matches jade.sprite)</span>
+          </label></li>
+          <!--<li><label>
+            <input type="checkbox" v-model="ruleOut"/>
+            <span>Disable invalid choices</span>
+          </label></li>-->
+        </ul>
         <ul class="output" v-if="Object.values(selectedPersonsDict).some(Boolean)">
-          <li v-for='p in convoMatches' :key='p.pageId'>
+          <li v-for='p in convoMatches(selectedPersonsList)' :key='p.pageId'>
             <StoryPageLink long :mspaId='p.pageId' />
             <span v-text="' ' + pageSummary(p)" />
           </li>
@@ -428,51 +491,89 @@ module.exports = {
     padding: 2em 1em;
   }
   ul, ol {
-    list-style: inside;
+    list-style: disc;
+    padding-left: 3em;
   }
 }
 .output {
   border: 1px dashed grey;
   padding: 4px;
   ul, ol {
-    list-style: inside;
+    list-style: disc;
+    padding-left: 3em;
   }
 }`,
         data: function() {
           return {
             selectedPersonsDict: {},
-            includePartial: false
+            includePartial: false,
+            // ruleOut: false,
+            peopleSortFn: undefined,
+            p_effectiveParticipants: (particpants_list, includePartial) => {
+              if (includePartial) {
+                return new Set([...particpants_list].reduce(
+                  (acc, s) => [s, ...s.split('.'), ...acc],
+                []))
+              } else {
+                return new Set(particpants_list)
+              }
+            },
+            m_wouldBeConvosMap: this.memoized((selected_persons_list, include_partial) => {
+              return this.allPeople.reduce((acc, new_person) => {
+                const query_list = [new_person, ...selected_persons_list]
+                acc[new_person] = this.convoPages.some(page => query_list.every(
+                    v => this.p_effectiveParticipants(page.sem_participants, include_partial).has(v)
+                ))
+                return acc
+              }, {})
+            }, 'mod.sem.m_wouldBeConvosMap')
           }
         },
         computed: {
-          allPeople(){
-            return [...new Set(
-                Object.values(this.$archive.mspa.story)
-                  .map(p => p.sem_participants).filter(Boolean)
-                  .reduce((acc, nset) => [...nset, ...acc], []))
-              ].sort()
-          },
+          convoPages() {return Object.values(this.$archive.mspa.story).filter(p => p.sem_participants)},
+          allPeople() {return Object.keys(this.$archive.flags['mod.semantic'].all_people)},
           selectedPersonsList(){
             return Object.keys(this.selectedPersonsDict).filter(k => this.selectedPersonsDict[k])
           },
-          convoMatches(){
-            return Object.values(vm.$archive.mspa.story)
-              .filter(p => p.sem_participants)
-              .filter(p => this.selectedPersonsList.every(v => this.effectiveParticipants(p.sem_participants).has(v)))
-          }
+          wouldBeConvosMap() {
+            return this.m_wouldBeConvosMap(this.selectedPersonsList, this.includePartial)
+          },
         },
         methods: {
-          effectiveParticipants(particpants_list) {
-            if (this.includePartial) {
-              return new Set([...particpants_list].reduce(
-                (acc, s) => [s, ...s.split('.'), ...acc],
-              []))
-            } else {
-              return new Set(particpants_list)
-            }
+          convoMatches(person_list) {
+            return this.convoPages
+              .filter(p => person_list.every(
+                v => this.effectiveParticipants(p.sem_participants).has(v)
+              ))
           },
-          pageSummary(p){
+          effectiveParticipants(particpants_list) {
+            return this.p_effectiveParticipants(particpants_list, this.includePartial)
+            // if (this.includePartial) {
+            //   return new Set([...particpants_list].reduce(
+            //     (acc, s) => [s, ...s.split('.'), ...acc],
+            //   []))
+            // } else {
+            //   return new Set(particpants_list)
+            // }
+          },
+          pageSummary(p) {
             return `${p.sem_wordcount} words. ${[...p.sem_participants].join(', ')}`
+          },
+          personColor(person) {
+            const colors = [...this.$archive.flags['mod.semantic'].all_people[person].colors]
+            if (colors.length < 1) {
+              this.$logger.warn("no colors for", person)
+              return undefined
+            } else if (colors.length == 1) {
+              return {color: '#' + colors[0]}
+            } else if (colors.length >= 2) {
+              return {
+                background: `linear-gradient(45deg, ${colors.sort().map(c => '#' + c).join(', ')})`,
+                "-webkit-background-clip": "text",
+                "background-clip": "text",
+                "text-fill-color": "transparent"
+              }
+            }
           }
         },
       }
